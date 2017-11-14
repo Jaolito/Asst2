@@ -1,8 +1,8 @@
 #include "mymemorymanager.h"
 
-static char myblock[8388608];
+void * myblock_ptr;
 static char free_list_memory[sizeof(struct page_meta)*2048];
-static int page_table[2048];
+static int frame_table[2048];
 char first_call = 1;
 context_node * current;
 mementryPtr head;
@@ -16,6 +16,11 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 	
 	if (first_call) {
 		first_call = 0;
+		
+		signal(SIGSEGV, swap_handler);
+		
+		//May need to free later
+		myblock_ptr = memalign( sysconf(_SC_PAGESIZE), 8388608);
 		
 		int i;
 		
@@ -85,6 +90,10 @@ int mydeallocate(void * x, char * file, int line, req_type rt){
 }
 
 int main(){
+	
+	unsigned int sz = sysconf(_SC_PAGESIZE);
+	printf("%d\n", sz);
+	
 	return 0;
 }
 
@@ -100,3 +109,53 @@ page_meta_ptr page_dequeue(){
 	temp->next = NULL;
 	return temp;
 }
+
+void swap_handler(int signum) {
+	
+	/*
+	 * Check page table to see if the page being accessed belongs to the current thread.
+	 * 		if so, change that page's mprotect to allow read/write: mprotect( myblock_ptr + frame_number * 4096, 4096, PROT_READ | PROT_WRITE);
+	 * 		else, find the page they want and swap pages
+	 */
+	
+}
+
+void swap_pages(int src_frame, int dest_frame) {
+	
+	if (dest_frame == -1) {
+		//Swap to new frame from free_queue_head
+		page_meta_ptr rtn_page = page_dequeue();
+		memcpy(myblock_ptr + rtn_page->page_frame*4096, myblock_ptr + src_frame * 4096);
+		
+		//Update page table
+		
+	} else {
+		void * temp[4096];
+		
+		memcpy(temp, myblock_ptr + src_frame * 4096);
+		memcpy(myblock_ptr + src_frame * 4096, myblock_ptr + dest_frame * 4096);
+		memcpy(myblock_ptr + dest_frame * 4096, temp);
+		
+	}
+	
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

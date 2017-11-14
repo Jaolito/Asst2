@@ -3,6 +3,8 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <signal.h>
+#include <malloc.h>
 #include "my_pthread_t.h"
 
 #define malloc(x) myallocate(x, __FILE__, __LINE__, THREADREQ)
