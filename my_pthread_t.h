@@ -26,8 +26,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ucontext.h>
-#include "mymalloc.h"
 
+
+/* MYMALLOC STRUCTS */
+typedef struct mementry {
+	int size;
+	int code;
+	int free;
+	struct mementry * next;
+	struct mementry * prev;
+}*mementryPtr;
 
 
 /* define your data structures here: */
@@ -43,7 +51,7 @@ typedef struct threadControlBlock {
 	my_pthread_t join_id;
 	void * value_ptr;
 	int mid;
-	int last_used_page;
+	char has_page;
 	mementryPtr head;
 	mementryPtr middle;
 } tcb; 
@@ -129,7 +137,16 @@ context_node * dequeuee(queue * Q);
 
 void enqueuee(context_node * enter_thread, queue * Q);
 
+int get_specific_count(queue * Q);
+
 void printAll();
+
+
+
+/* MYMALLOC STUFF */
+
+void * mymalloc(unsigned int x, char * file, int line, void * memptr, int size);
+void myfree(void * x, char * file, int line);
 
 #ifdef USE_MY_PTHREAD
 #define pthread_t my_pthread_t

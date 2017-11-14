@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include "mymalloc.h"
 
-static mementryPtr head, middle;
+extern mementryPtr head;
+extern mementryPtr middle;
 static const int mycode = 1234567890;
 
 void * mymalloc(unsigned int x, char * file, int line, void * memptr, int size) {
