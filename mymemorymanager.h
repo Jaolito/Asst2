@@ -11,9 +11,10 @@
 /* Structs */
 
 typedef struct page_meta {
-	char free;
-	my_pthread_t tid;
+	int page_frame;
+	struct page_meta * next;
 }*page_meta_ptr;
+
 
 
 typedef enum {THREADREQ, LIBRARYREQ} req_type;
@@ -23,5 +24,9 @@ typedef enum {THREADREQ, LIBRARYREQ} req_type;
 void * myallocate(unsigned int x, char * file, int line, req_type rt);
 
 int mydeallocate(void * x, char * file, int line, req_type rt);
+
+void page_enqueue(page_meta_ptr node);
+
+page_meta_ptr page_dequeue();
 
 #endif

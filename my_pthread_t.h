@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ucontext.h>
+#include "mymalloc.h"
 
 
 
@@ -42,6 +43,9 @@ typedef struct threadControlBlock {
 	my_pthread_t join_id;
 	void * value_ptr;
 	int mid;
+	int last_used_page;
+	mementryPtr head;
+	mementryPtr middle;
 } tcb; 
 
 typedef struct context_node { 

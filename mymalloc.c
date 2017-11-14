@@ -3,18 +3,17 @@
 #include "mymalloc.h"
 
 static mementryPtr head, middle;
-static char myblock[5000];
 static const int mycode = 1234567890;
 
-void * mymalloc(unsigned int x, char * file, int line) {
+void * mymalloc(unsigned int x, char * file, int line, void * memptr, int size) {
 	
 	
 	/*
 	 * If nothing has been allocated yet, this creates and initializes the first mementry struct which is pointed to by head and middle.
 	 */
 	if ( head == NULL) {
-		head = (mementryPtr)myblock;
-		head->size = 5000 - sizeof(struct mementry);
+		head = (mementryPtr)memptr;
+		head->size = size - sizeof(struct mementry);
 		head->code = mycode;
 		head->free = 1;
 		head->next = NULL;
