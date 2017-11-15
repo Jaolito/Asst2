@@ -51,9 +51,10 @@ typedef struct threadControlBlock {
 	my_pthread_t join_id;
 	void * value_ptr;
 	int mid;
-	char has_page;
 	mementryPtr head;
 	mementryPtr middle;
+	int malloc_frame;
+	struct page_meta * first_page;
 } tcb; 
 
 typedef struct context_node { 

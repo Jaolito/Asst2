@@ -34,7 +34,7 @@ int mutex_count = 0;
 /* create a new thread */
 int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
 	
-	//printf("In pthread_create\n");
+	printf("In pthread_create\n");
 	void (*exit_function) (void *) = &my_pthread_exit;
 	ucontext_t *exit_context = (ucontext_t *) malloc(sizeof(ucontext_t));
 	getcontext(exit_context);
@@ -73,7 +73,8 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
 		new_thread_block -> join_id = -1;
 		new_thread_block -> value_ptr = NULL;
 		new_thread_block -> mid = -1;
-		new_thread_block -> has_page = 0;
+		new_thread_block -> first_page = NULL;
+		new_thread_block -> malloc_frame = 0;
 		
 		new_node -> thread_block = new_thread_block;
 		new_node -> next = NULL;
@@ -87,7 +88,8 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
 		old_thread_block -> join_id = -1;
 		old_thread_block -> value_ptr = NULL;
 		old_thread_block -> mid = -1;
-		old_thread_block -> has_page = 0;
+		old_thread_block -> first_page = NULL;
+		old_thread_block -> malloc_frame = 0;
 		
 		old_node -> thread_block = old_thread_block;
 		old_node -> next = NULL;
@@ -112,7 +114,8 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
 		new_thread_block -> join_id = -1;
 		new_thread_block -> value_ptr = NULL;
 		new_thread_block -> mid = -1;
-		new_thread_block -> has_page = 0;
+		new_thread_block -> first_page = NULL;
+		new_thread_block -> malloc_frame = 0;
 		
 		new_node -> thread_block = new_thread_block;
 		new_node -> next = NULL;
@@ -499,7 +502,7 @@ int updateQueue(){
 }
 
 void freeContext(context_node * freeable) {
-	free(freeable->thread_block->thread_context->uc_stack.ss_sp);
+	//free(freeable->thread_block->thread_context->uc_stack.ss_sp);
 	free(freeable->thread_block->thread_context);
 	free(freeable->thread_block);
 	free(freeable);
