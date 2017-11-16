@@ -149,6 +149,8 @@ void printAll();
 void * mymalloc(unsigned int x, char * file, int line, void * memptr, int size);
 void myfree(void * x, char * file, int line);
 
+int free_mem_count();
+
 #ifdef USE_MY_PTHREAD
 #define pthread_t my_pthread_t
 #define pthread_mutex_t my_pthread_mutex_t

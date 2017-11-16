@@ -606,14 +606,14 @@ void * mymalloc(unsigned int x, char * file, int line, void * memptr, int size) 
 							middle = temp;
 						}
 						
-						current->thread_block->head = head;
-						current->thread_block->middle = middle;
+						//current->thread_block->head = head;
+						//current->thread_block->middle = middle;
 						return walker+1;					//Returns the pointer to the requested space.
 					}else {
 						walker->free = 0;
 						
-						current->thread_block->head = head;
-						current->thread_block->middle = middle;
+						//current->thread_block->head = head;
+						//current->thread_block->middle = middle;
 						return walker+1;					//Returns the pointer to the requested space.
 					}
 				}else {
@@ -644,14 +644,14 @@ void * mymalloc(unsigned int x, char * file, int line, void * memptr, int size) 
 						walker->free = 0;
 						walker->next = temp;
 						
-						current->thread_block->head = head;
-						current->thread_block->middle = middle;
+						//current->thread_block->head = head;
+						//current->thread_block->middle = middle;
 						return walker+1;					//Returns the pointer to the requested space.
 					}else {
 						walker->free = 0;
 						
-						current->thread_block->head = head;
-						current->thread_block->middle = middle;
+						//current->thread_block->head = head;
+						//current->thread_block->middle = middle;
 						return walker+1;					//Returns the pointer to the requested space.
 					}
 				}else {
@@ -681,14 +681,14 @@ void * mymalloc(unsigned int x, char * file, int line, void * memptr, int size) 
 						walker->free = 1;
 						walker->next = temp;
 						
-						current->thread_block->head = head;
-						current->thread_block->middle = middle;
+						//current->thread_block->head = head;
+						//current->thread_block->middle = middle;
 						return temp+1;					//Returns the pointer to the requested space.
 					}else {
 						walker->free = 0;
 						
-						current->thread_block->head = head;
-						current->thread_block->middle = middle;
+						//current->thread_block->head = head;
+						//current->thread_block->middle = middle;
 						return walker+1;					//Returns the pointer to the requested space.
 					}
 				}else {
@@ -757,4 +757,18 @@ void myfree(void * x, char * file, int line) {
 		}
 	}
 	return;
+}
+
+int free_mem_count() {
+	mementryPtr walker = head;
+	int rtn = 0;
+	
+	while(walker != NULL) {
+		if (walker->free) {
+			rtn += walker->size;
+		}
+		walker = walker->next;
+	}
+	
+	return rtn;
 }

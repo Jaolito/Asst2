@@ -15,13 +15,12 @@ void * os_mem_ptr;
 int swap_fd;
 off_t swap_file_offset;
 int page_counter = 0;
+page_meta_ptr current_page_meta;
 
 void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 	
 	void * rtn_ptr;
-	page_meta_ptr current_page_meta;
-	//Change all uses of temp to ^
-
+	page_meta_ptr new_page_meta;
 
 		
 	if (first_call) {
@@ -54,23 +53,31 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		return temp;
 	}
 	if (current->thread_block->first_page != NULL) {
-		head = current->thread_block->head;
-		middle = current->thread_block->middle;
+		page_meta_ptr temp_ptr = frame_table[current->thread_block->malloc_frame];
+		//If the right page is in frame, set the current_page_meta, head, and middle
+		if (temp_ptr->tid == current->thread_block->tid) {
+			current_page_meta = temp_ptr;
+			head = current_page_meta->head;
+			middle = current_page_meta->middle;
+		} else {
+			//SWAP IN THE RIGHT PAGE
+		}
 	} else { //Current thread does not have its first page yet
 		
 		//Total number of potential pages not exceeded
 		if (page_counter < 6015) {
 			swap_pages(0, -1);
-			current_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
-			current_page_meta->page_frame = 0;
-			current_page_meta->tid = current->thread_block->tid;
-			current_page_meta->next = NULL;
-			current_page_meta->head = NULL;
-			current_page_meta->middle = NULL;
-			current->thread_block->first_page = current_page_meta;
-			frame_table[0] = current_page_meta;
+			new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+			new_page_meta->page_frame = 0;
+			new_page_meta->tid = current->thread_block->tid;
+			new_page_meta->next = NULL;
+			new_page_meta->head = NULL;
+			new_page_meta->middle = NULL;
+			current->thread_block->first_page = new_page_meta;
+			frame_table[0] = new_page_meta;
+			current_page_meta = new_page_meta;
 		} else {//No free pages in physical memory, check swap file
-			//check if swapfile is full
+			//check if swapfile is full	
 		}
 		head = NULL;
 		middle = NULL;
@@ -79,23 +86,46 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 	rtn_ptr = mymalloc(x, file, line, myblock_ptr + current->thread_block->malloc_frame*4096, 4096);
 	current_page_meta->head = head;
 	current_page_meta->middle = middle;
+	current_page_meta->free_page_mem = free_mem_count();
 	
 	//If there was no space in the page for the request...
 	if (rtn_ptr == NULL) {
+		
+		//Check if any of the previous pages has room for the request.
+		page_meta_ptr temp_ptr = current->thread_block->first_page;
+		while (temp_ptr != NULL) {
+			if (temp_ptr->free_page_mem >= x) {
+				current_page_meta = temp_ptr;
+				head = current_page_meta->head;
+				middle = current_page_meta->middle;
+				rtn_ptr = mymalloc(x, file, line, myblock_ptr + current->thread_block->malloc_frame*4096, 4096);
+				if (rtn_ptr != NULL) {
+					current_page_meta->head = head;
+					current_page_meta->middle = middle;
+					current_page_meta->free_page_mem = free_mem_count();
+					return rtn_ptr;
+				}
+			}
+			temp_ptr = temp_ptr->next;
+		}
+		
+		
+		//If you reach here, then none of the thread's pages could fit the request, so we need to allocate a new page.
 		//allocate new page from free list
 		if (page_counter < 6015) {
 			current->thread_block->malloc_frame++;
 			
 			//Swaps the page after the current page to free space for contiguous pages
 			swap_pages(current->thread_block->malloc_frame, -1);
-			current_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
-			current_page_meta->page_frame = current->thread_block->malloc_frame;
-			current_page_meta->tid = current->thread_block->tid;
-			current_page_meta->next = NULL;
-			current_page_meta->head = NULL;
-			current_page_meta->middle = NULL;
-			frame_table[current->thread_block->malloc_frame] = current_page_meta;
-			frame_table[current->thread_block->malloc_frame-1]->next = current_page_meta;
+			new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+			new_page_meta->page_frame = current->thread_block->malloc_frame;
+			new_page_meta->tid = current->thread_block->tid;
+			new_page_meta->next = NULL;
+			new_page_meta->head = NULL;
+			new_page_meta->middle = NULL;
+			frame_table[current->thread_block->malloc_frame] = new_page_meta;
+			frame_table[current->thread_block->malloc_frame-1]->next = new_page_meta;
+			current_page_meta = new_page_meta;
 		} else {
 			//check if swapfile is full
 		}
@@ -105,37 +135,52 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		rtn_ptr = mymalloc(x, file, line, myblock_ptr + current->thread_block->malloc_frame*4096, 4096);
 		current_page_meta->head = head;
 		current_page_meta->middle = middle;
+		current_page_meta->free_page_mem = free_mem_count();
 	}
 	return rtn_ptr;
 }
 
 int mydeallocate(void * x, char * file, int line, req_type rt){
 	
-	head = current->thread_block->head;
-	middle = current->thread_block->middle;
-	
-	//Check to see if proper page is in frame. Swap if not
 	int mem_offset = (int)(x - myblock_ptr);
 	int index = mem_offset / 4096;
 	int i;
 	
+	//Check to see if proper page is in frame. Swap if not
 	if (frame_table[index]->tid == current->thread_block->tid) {
-		//Check myfree return value for errors
-		head = frame_table[index]->head;
-		middle = frame_table[index]->middle;
-		myfree(x, file, line);
-	} else {
-		page_meta_ptr temp = current->thread_block->first_page;
+		current_page_meta = frame_table[index];
+		head = current_page_meta->head;
+		middle = current_page_meta->middle;
 		
-		for (i = 0; i < index; i++) {
-			temp = temp->next;
+		//Check myfree return value for errors
+		myfree(x, file, line);
+		current_page_meta->head = head;
+		current_page_meta->middle = middle;
+		current_page_meta->free_page_mem = free_mem_count();
+	} else {
+		//Page isn't in the frame, so find it and swap it in
+		page_meta_ptr temp;
+		
+		if (index != 0 && frame_table[index-1]->tid == current->thread_block->tid) {
+			temp = frame_table[index-1]->next;
+		} else {
+			temp = current->thread_block->first_page;
+			for (i = 0; i < index; i++) {
+				temp = temp->next;
+			}
 		}
 		
-		//Assuming temp is in physical memory
-		swap_pages(index, temp->page_frame);
-		head = temp->head;
-		middle = temp->middle;
+		//Found the page, now swap it
+		current_page_meta = temp;
+		head = current_page_meta->head;
+		middle = current_page_meta->middle;
+		swap_pages(index, current_page_meta->page_frame);
+		
+		//Check myfree return value for errors
 		myfree(x, file, line);
+		current_page_meta->head = head;
+		current_page_meta->middle = middle;
+		current_page_meta->free_page_mem = free_mem_count();
 	}
 	
 	//How do we tell a thread that one of its pages has free space if it has multiple pages
