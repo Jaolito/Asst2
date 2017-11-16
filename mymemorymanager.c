@@ -1,64 +1,68 @@
 #include "mymemorymanager.h"
 #include "my_pthread_t.h"
 #include "my_pthread.c"
+#include <sys/types.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 void * myblock_ptr;
-void * myswap_ptr;
-static char free_list_memory[(sizeof(struct page_meta) + 32)*2048];
-static page_meta_ptr frame_table[2048];
+page_meta_ptr * frame_table;
 char first_call = 1;
 context_node * current;
 mementryPtr head;
 mementryPtr middle;
-mementryPtr page_meta_mem_head = NULL;
-mementryPtr page_meta_mem_middle = NULL;
-void * page_meta_mem_ptr;
-free_frame_ptr free_queue_head, free_queue_back;
+void * os_mem_ptr;
+int swap_fd;
+off_t swap_file_offset;
+int page_counter = 0;
 
 void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 	
 	void * rtn_ptr;
 	page_meta_ptr current_page_meta;
 	//Change all uses of temp to ^
+
+
 		
 	if (first_call) {
 		first_call = 0;
-		
 		signal(SIGSEGV, swap_handler);
 		
 		//May need to free later
 		myblock_ptr = memalign( sysconf(_SC_PAGESIZE), 8388608);
 		printf("myblock_ptr address: %p\n", myblock_ptr);
 		//Swap space
-		myswap_ptr = memalign( sysconf(_SC_PAGESIZE), 8388608*2);
+		swap_fd = open("swap_file",O_RDWR);
 		
-		page_meta_mem_ptr = myswap_ptr + 16437248;
-		
-		int i;
-		
-		for (i = 0; i < 2048; i++) {
-			free_frame_ptr temp_free = (free_frame_ptr)mymalloc(sizeof(struct free_frame), NULL, 0, free_list_memory, (sizeof(struct free_frame)+32)*2048);
-			temp_free->page_frame = i;
-			temp_free->next = NULL;
-			page_enqueue(temp_free);
-			frame_table[i] = NULL;
-		}
+		//myswap_ptr = memalign( sysconf(_SC_PAGESIZE), 8388608*2);
+		//6015 pages total
+		os_mem_ptr = myblock_ptr + 7860224;
+		/*
+		*
+		*  8118272- (16677216/4096)*40  = (4101 + sizeof(page_meta)) num_frames
+		*
+		*	40 is size of page_meta
+		*/
+		frame_table = (page_meta_ptr *)myallocate(sizeof(page_meta_ptr)*1919, NULL, 0, LIBRARYREQ);
 	}
 	
 	//If the current thread has a page
+	if(rt == LIBRARYREQ){
+		printf("Library Call\n");
+		void * temp = os_mem_ptr;
+		os_mem_ptr += x;
+		return temp;
+	}
 	if (current->thread_block->first_page != NULL) {
 		head = current->thread_block->head;
 		middle = current->thread_block->middle;
 	} else { //Current thread does not have its first page yet
 		
-		//Page free in physical memory
-		if (free_queue_head != NULL) {
+		//Total number of potential pages not exceeded
+		if (page_counter < 6015) {
 			swap_pages(0, -1);
-			head = page_meta_mem_head;
-			middle = page_meta_mem_middle;
-			current_page_meta = (page_meta_ptr)mymalloc(sizeof(struct page_meta), NULL, 0, page_meta_mem_ptr, 83*4096);
+			current_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
 			current_page_meta->page_frame = 0;
-			current_page_meta->in_pm = '1';
 			current_page_meta->tid = current->thread_block->tid;
 			current_page_meta->next = NULL;
 			current_page_meta->head = NULL;
@@ -79,17 +83,13 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 	//If there was no space in the page for the request...
 	if (rtn_ptr == NULL) {
 		//allocate new page from free list
-		if (free_queue_head != NULL) {
+		if (page_counter < 6015) {
 			current->thread_block->malloc_frame++;
 			
 			//Swaps the page after the current page to free space for contiguous pages
 			swap_pages(current->thread_block->malloc_frame, -1);
-			
-			head = page_meta_mem_head;
-			middle = page_meta_mem_middle;
-			current_page_meta = (page_meta_ptr)mymalloc(sizeof(struct page_meta), NULL, 0, page_meta_mem_ptr, 83*4096);
+			current_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
 			current_page_meta->page_frame = current->thread_block->malloc_frame;
-			current_page_meta->in_pm = '1';
 			current_page_meta->tid = current->thread_block->tid;
 			current_page_meta->next = NULL;
 			current_page_meta->head = NULL;
@@ -155,22 +155,6 @@ int main(){
 }*/
 
 /* Helper Functions */
-void page_enqueue(free_frame_ptr node){
-	if (free_queue_head != NULL) {
-		free_queue_back->next = node;
-		free_queue_back = node;
-	} else {
-		free_queue_head = node;
-		free_queue_back = node;
-	}
-}
-
-free_frame_ptr page_dequeue(){
-	free_frame_ptr temp = free_queue_head;
-	free_queue_head = free_queue_head->next;
-	temp->next = NULL;
-	return temp;
-}
 
 void swap_handler(int signum) {
 	
@@ -183,21 +167,33 @@ void swap_handler(int signum) {
 }
 
 void swap_pages(int src_frame, int dest_frame) {
+
+	void * temp[4096];
+
+	int swap_index;
 	
 	if (dest_frame == -1) {
-		//Swap to new frame from free_queue_head
-		free_frame_ptr rtn_page = page_dequeue();
-		memcpy(myblock_ptr + rtn_page->page_frame*4096, myblock_ptr + src_frame * 4096, 4096);
-		
-		//Update page table
-		if (frame_table[src_frame] != NULL) {
-			frame_table[src_frame]->page_frame = rtn_page->page_frame;
-			frame_table[rtn_page->page_frame] = frame_table[src_frame];
-			frame_table[src_frame] = NULL;
+
+		if(page_counter < 1919){
+			//Swap to new frame from free_queue_head
+			memcpy(myblock_ptr + page_counter*4096, myblock_ptr + src_frame * 4096, 4096);
+			
+			//Update page table
+			if (frame_table[src_frame] != NULL) {
+				frame_table[src_frame]->page_frame = page_counter;
+				frame_table[page_counter] = frame_table[src_frame];
+				frame_table[src_frame] = NULL;
+			}
+		}else{
+			frame_table[src_frame]->page_frame = page_counter;
+			swap_index = page_counter - 1919;
+			swap_file_offset = lseek(swap_fd,swap_index*4096,SEEK_SET);
+			write(swap_fd, myblock_ptr + src_frame * 4096, 4096);
+			lseek(swap_fd, -swap_file_offset + 4096, SEEK_CUR);
+
 		}
-		
-	} else {
-		void * temp[4096];
+			page_counter++;
+	}else {
 		
 		memcpy(temp, myblock_ptr + src_frame * 4096, 4096);
 		memcpy(myblock_ptr + src_frame * 4096, myblock_ptr + dest_frame * 4096, 4096);
@@ -215,7 +211,23 @@ void swap_pages(int src_frame, int dest_frame) {
 
 
 
-
+/***
+*
+* mprotect() to trigger SIGSEV, from the starting point until 1919*4096, not including "OS" region of physical memory
+*
+* lseek()  --- zero out 16MG of space???
+*
+* handle signal and swap correspondingly
+*
+* handle large allocations of multiple pages, TRICKY
+*
+* deallocation NOTE: keep track of how much free memory is in the block, member is entered in struct 
+*
+* document and comment code
+*
+* EXTRA: free space in physical memory 
+*
+***/
 
 
 

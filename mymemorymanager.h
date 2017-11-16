@@ -1,6 +1,9 @@
 #ifndef MYMEMORYMANAGER_H
 #define MYMEMORYMANAGER_H
 
+
+
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
@@ -8,19 +11,18 @@
 #include <string.h>
 #include "my_pthread_t.h"
 
-
+#define malloc(x) myallocate(x, __FILE__, __LINE__, THREADREQ)
+#define free(x) mydeallocate(x, __FILE__, __LINE__, THREADREQ)
 
 /* Structs */
 
-typedef struct free_frame {
-	int page_frame;
-	struct free_frame * next;
-}*free_frame_ptr;
+
 
 typedef struct page_meta {
 	int page_frame;
-	char in_pm;
 	int tid;
+	int num_pages;
+	int free_page_mem;
 	struct page_meta * next;
 	mementryPtr head;
 	mementryPtr middle;
@@ -34,10 +36,6 @@ typedef enum {THREADREQ, LIBRARYREQ} req_type;
 void * myallocate(unsigned int x, char * file, int line, req_type rt);
 
 int mydeallocate(void * x, char * file, int line, req_type rt);
-
-void page_enqueue(free_frame_ptr node);
-
-free_frame_ptr page_dequeue();
 
 void swap_handler(int signum);
 

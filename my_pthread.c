@@ -36,34 +36,34 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
 	
 	printf("In pthread_create\n");
 	void (*exit_function) (void *) = &my_pthread_exit;
-	ucontext_t *exit_context = (ucontext_t *) malloc(sizeof(ucontext_t));
+	ucontext_t *exit_context = (ucontext_t *)myallocate((sizeof(ucontext_t)), NULL, 0, LIBRARYREQ);
 	getcontext(exit_context);
 	exit_context -> uc_link=0;
- 	exit_context -> uc_stack.ss_sp=malloc(MEM);
+ 	exit_context -> uc_stack.ss_sp = myallocate(2080, NULL, 0, LIBRARYREQ);
  	exit_context -> uc_stack.ss_size=MEM;
  	exit_context -> uc_stack.ss_flags=0;
  	makecontext(exit_context, (void*)exit_function, 1, NULL);
 
 	
 	ucontext_t *new_context, *old_context;
-	new_context = (ucontext_t *) malloc(sizeof(ucontext_t));
+	new_context = (ucontext_t *)myallocate((sizeof(ucontext_t)), NULL, 0, LIBRARYREQ);
 	getcontext(new_context);
-	tcb * new_thread_block = (tcb *)malloc(sizeof(tcb));
-	context_node * new_node = (context_node *) malloc(sizeof(context_node));
+	tcb * new_thread_block = (tcb *)myallocate((sizeof(tcb)), NULL, 0, LIBRARYREQ);
+	context_node * new_node = (context_node *)myallocate((sizeof(context_node)), NULL, 0, LIBRARYREQ);
 	
 	if (firstThread) {
 		firstThread = 0;
 		
 		createScheduler();
 		
-		old_context = (ucontext_t *) malloc(sizeof(ucontext_t));
-		context_node * old_node = (context_node *) malloc(sizeof(context_node));
-		tcb * old_thread_block = (tcb *)malloc(sizeof(tcb));
+		old_context = (ucontext_t *)myallocate((sizeof(ucontext_t)), NULL, 0, LIBRARYREQ);
+		context_node * old_node = (context_node *)myallocate((sizeof(context_node)), NULL, 0, LIBRARYREQ);
+		tcb * old_thread_block = (tcb *)myallocate((sizeof(tcb)), NULL, 0, LIBRARYREQ);
 		getcontext(old_context);
 		
 		//Creates new thread context and new thread node 
 		new_context -> uc_link=exit_context;
- 		new_context -> uc_stack.ss_sp=malloc(MEM);
+ 		new_context -> uc_stack.ss_sp= myallocate(MEM, NULL, 0, LIBRARYREQ);
  		new_context -> uc_stack.ss_size=MEM;
  		new_context -> uc_stack.ss_flags=0;
  		makecontext(new_context, (void*)function, 1, arg);
@@ -104,7 +104,7 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
 	} else {
 		//Creates new thread context and new thread node 
 		new_context -> uc_link=exit_context;
- 		new_context -> uc_stack.ss_sp=malloc(MEM);
+ 		new_context -> uc_stack.ss_sp= myallocate(MEM, NULL, 0, LIBRARYREQ);
  		new_context -> uc_stack.ss_size=MEM;
  		new_context -> uc_stack.ss_flags=0;
  		makecontext(new_context, (void*)function, 1, arg);
@@ -150,7 +150,7 @@ void my_pthread_exit(void *value_ptr) {
 	//printf("In pthread_exit\n");
 	
 	int i;
-	exit_node * e = (exit_node *) malloc(sizeof(exit_node));
+	exit_node * e = (exit_node *)myallocate((sizeof(exit_node)), NULL, 0, LIBRARYREQ);
 	e -> next = NULL;
 	e -> tid = current->thread_block->tid;
 	e -> value_ptr = value_ptr;
@@ -318,18 +318,17 @@ int my_pthread_mutex_destroy(my_pthread_mutex_t *mutex) {
 void createScheduler() {
 	
 	int i;
-	running_qs = (pLevels *) malloc(sizeof(pLevels));
-	
+	running_qs = (pLevels *)myallocate((sizeof(pLevels)), NULL, 0, LIBRARYREQ);	
 	for (i = 0; i < NUM_PRIORITIES; i++) {
-		running_qs->rqs[i] = (queue *) malloc(sizeof(queue));
+		running_qs->rqs[i] = (queue *)myallocate((sizeof(queue)), NULL, 0, LIBRARYREQ);
 		running_qs->rqs[i]->front = NULL;
 		running_qs->rqs[i]->back = NULL;
 	}
-	waiting_queue = (queue *) malloc(sizeof(queue));
+	waiting_queue = (queue *)myallocate((sizeof(queue)), NULL, 0, LIBRARYREQ);
 	waiting_queue->front = NULL;
 	waiting_queue->back = NULL;
 	
-	join_queue = (queue *) malloc(sizeof(queue));
+	join_queue = (queue *)myallocate((sizeof(queue)), NULL, 0, LIBRARYREQ);
 	join_queue->front = NULL;
 	join_queue->back = NULL;
 	
@@ -452,7 +451,7 @@ int updateQueue(){
 			//printf("PEXIT CASE\n");
 			dequeuee(running_qs -> rqs[current->thread_block->thread_priority]); 
 			if (current->thread_block->tid > 0) {
-				freeContext(current);
+				//freeContext(current);
 			}
 			current = NULL;
 			break;
@@ -501,12 +500,12 @@ int updateQueue(){
 	return 0;
 }
 
-void freeContext(context_node * freeable) {
+/*void freeContext(context_node * freeable) {
 	//free(freeable->thread_block->thread_context->uc_stack.ss_sp);
 	free(freeable->thread_block->thread_context);
 	free(freeable->thread_block);
 	free(freeable);
-}
+}*/
 
 /* Queues */
 

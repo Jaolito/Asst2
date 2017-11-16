@@ -13,7 +13,7 @@ void * mythread2(void *arg) {
 	myarg_t *m = (myarg_t *) arg;
 	
 	printf("pre-malloc\n");
-	int * intArray = (int *) myallocate(sizeof(int)*2, NULL, 0, 0);
+	int * intArray = (int *) malloc(sizeof(int)*2);
 	printf("post-malloc\n");
 	printf("intArray thread2 address: %p\n", (void *)intArray);
 	intArray[0] = m->a;
@@ -21,7 +21,7 @@ void * mythread2(void *arg) {
 	
 	printf("[%d, %d]\n", intArray[0], intArray[1]);
 	
-	int * intArray2 = (int *) myallocate(sizeof(int)*30, NULL, 0, 0);
+	int * intArray2 = (int *) malloc(sizeof(int)*30);
 	
 	printf("intArray2 thread2 address: %p\n", (void *)intArray2);
 	
@@ -34,7 +34,7 @@ void *mythread(void *arg){
 	myarg_t *m = (myarg_t *) arg;
 	
 	printf("pre-malloc\n");
-	int * intArray = (int *) myallocate(sizeof(int)*2, NULL, 0, 0);
+	int * intArray = (int *) malloc(sizeof(int)*2);
 	printf("post-malloc\n");
 	printf("intArray address: %p\n", (void *)intArray);
 	intArray[0] = m->a;
@@ -42,7 +42,7 @@ void *mythread(void *arg){
 	
 	printf("[%d, %d]\n", intArray[0], intArray[1]);
 	
-	int * intArray2 = (int *) myallocate(sizeof(int)*30, NULL, 0, 0);
+	int * intArray2 = (int *) malloc(sizeof(int)*30);
 	int i;
 	for (i = 0; i < 20; i++) {
 		intArray2[i] = i*100;
