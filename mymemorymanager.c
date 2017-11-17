@@ -27,8 +27,6 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		first_call = 0;
 		signal(SIGSEGV, swap_handler);
 		
-		char * str = "Hello";
-		
 		//May need to free later
 		myblock_ptr = memalign( sysconf(_SC_PAGESIZE), 8388608);
 		printf("myblock_ptr address: %p\n", myblock_ptr);
@@ -73,20 +71,36 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 				swap_pages(i, -1);
 			}
 			
-			//Create new page meta
-			new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
-			new_page_meta->page_frame = 0;
-			new_page_meta->tid = current->thread_block->tid;
-			new_page_meta->next = NULL;
-			new_page_meta->head = NULL;
-			new_page_meta->middle = NULL;
-			new_page_meta->num_pages = num_of_pages;
-			current->thread_block->first_page = new_page_meta;
+			//Create page meta for the first of the big chunk
+			page_meta_ptr front_meta_ptr = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+			front_meta_ptr->page_frame = 0;
+			front_meta_ptr->tid = current->thread_block->tid;
+			front_meta_ptr->next = NULL;
+			front_meta_ptr->head = NULL;
+			front_meta_ptr->middle = NULL;
+			front_meta_ptr->front_meta = front_meta_ptr;
+			front_meta_ptr->num_pages = num_of_pages;
+			front_meta_ptr->free_page_mem = -1;
+			current->thread_block->first_page = front_meta_ptr;
+			frame_table[0] = front_meta_ptr;
 			
-			//The "page" will take up several indices of the frame_table. When evicted, must account for all frames occupied. ***********************************
-			for (i = 0; i < num_of_pages; i++) {
+			//Create page metas for the rest of the pages of the big chunk
+			for (i = 1; i < num_of_pages; i++) {
+				new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+				new_page_meta->page_frame = i;
+				new_page_meta->tid = current->thread_block->tid;
+				new_page_meta->next = NULL;
+				frame_table[i-1]->next = new_page_meta;
+				new_page_meta->head = NULL;
+				new_page_meta->middle = NULL;
+				new_page_meta->front_meta = front_meta_ptr;
+				new_page_meta->num_pages = num_of_pages;
+				new_page_meta->free_page_mem = -1;
 				frame_table[i] = new_page_meta;
 			}
+			//Current thread block points to the last frame of the pages
+			current->thread_block->malloc_frame = num_of_pages - 1;
+			
 			current_page_meta = new_page_meta;
 		//If not first page, evict pages after the last frame used.
 		} else {
@@ -95,24 +109,42 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 				swap_pages(i, -1);
 			}
 			
-			//Create new page meta
-			new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
-			new_page_meta->page_frame = current->thread_block->malloc_frame;
-			new_page_meta->tid = current->thread_block->tid;
-			new_page_meta->next = NULL;
-			new_page_meta->head = NULL;
-			new_page_meta->middle = NULL;
-			new_page_meta->num_pages = num_of_pages;
-			frame_table[current->thread_block->malloc_frame-1]->next = new_page_meta;
+			//Create page meta for the first of the big chunk
+			page_meta_ptr front_meta_ptr = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+			front_meta_ptr->page_frame = current->thread_block->malloc_frame;
+			front_meta_ptr->tid = current->thread_block->tid;
+			front_meta_ptr->next = NULL;
+			frame_table[current->thread_block->malloc_frame-1]->next = front_meta_ptr;
+			front_meta_ptr->head = NULL;
+			front_meta_ptr->middle = NULL;
+			front_meta_ptr->front_meta = front_meta_ptr;
+			front_meta_ptr->num_pages = num_of_pages;
+			front_meta_ptr->free_page_mem = -1;
+			current->thread_block->first_page = front_meta_ptr;
+			frame_table[front_meta_ptr->page_frame] = front_meta_ptr;
 			
-			//The "page" will take up several indices of the frame_table. When evicted, must account for all frames occupied. ***********************************
-			for (i = current->thread_block->malloc_frame; i < current->thread_block->malloc_frame; i++) {
+			//Create page metas for the rest of the pages of the big chunk
+			for (i = front_meta_ptr->page_frame + 1; i < front_meta_ptr->page_frame + num_of_pages; i++) {
+				current->thread_block->malloc_frame++;
+				new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+				new_page_meta->page_frame = i;
+				new_page_meta->tid = current->thread_block->tid;
+				new_page_meta->next = NULL;
+				frame_table[i-1]->next = new_page_meta;
+				new_page_meta->head = NULL;
+				new_page_meta->middle = NULL;
+				new_page_meta->front_meta = front_meta_ptr;
+				new_page_meta->num_pages = num_of_pages;
+				new_page_meta->free_page_mem = -1;
 				frame_table[i] = new_page_meta;
 			}
+			
 			current_page_meta = new_page_meta;
 		}
 		
-		rtn_ptr = mymalloc(x, file, line, myblock_ptr + current->thread_block->malloc_frame*4096, 4096*num_of_pages);
+		rtn_ptr = mymalloc(x, file, line, myblock_ptr + current_page_meta->front_meta->page_frame*4096, 4096*num_of_pages);
+		
+		//Head, Middle, and free memory are stored on the last page of the big chunk.
 		current_page_meta->head = head;
 		current_page_meta->middle = middle;
 		current_page_meta->free_page_mem = free_mem_count();

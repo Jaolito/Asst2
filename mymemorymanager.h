@@ -24,6 +24,7 @@ typedef struct page_meta {
 	int num_pages;
 	int free_page_mem;
 	struct page_meta * next;
+	struct page_meta * front_meta;
 	mementryPtr head;
 	mementryPtr middle;
 }*page_meta_ptr;
