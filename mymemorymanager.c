@@ -27,14 +27,17 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		first_call = 0;
 		signal(SIGSEGV, swap_handler);
 		
+		char * str = "Hello";
+		
 		//May need to free later
 		myblock_ptr = memalign( sysconf(_SC_PAGESIZE), 8388608);
 		printf("myblock_ptr address: %p\n", myblock_ptr);
 		//Swap space
-		swap_fd = open("swap_file",O_RDWR);
+		swap_fd = open("swap_file",O_RDWR | O_CREAT);
+		lseek(swap_fd, 8338608*2, SEEK_SET);
 		
 		//myswap_ptr = memalign( sysconf(_SC_PAGESIZE), 8388608*2);
-		//6015 pages total
+		//6015 pages total, 1919 frames in physical memory
 		os_mem_ptr = myblock_ptr + 7860224;
 		/*
 		*
@@ -47,11 +50,76 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 	
 	//If the current thread has a page
 	if(rt == LIBRARYREQ){
-		printf("Library Call\n");
+		//printf("Library Call\n");
 		void * temp = os_mem_ptr;
 		os_mem_ptr += x;
 		return temp;
 	}
+	
+	//If the request is greater than a page size...
+	if (x > 4064) {
+		
+		//Calculate how many pages are needed for the request.
+		int i;
+		int num_of_pages = (x + 32) / 4096;
+		
+		if ((x+32) % 4096 > 0) {
+			num_of_pages++;
+		}
+		
+		//If first page, evict pages from the front.
+		if (current->thread_block->first_page == NULL) {
+			for (i = 0; i < num_of_pages; i++) {
+				swap_pages(i, -1);
+			}
+			
+			//Create new page meta
+			new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+			new_page_meta->page_frame = 0;
+			new_page_meta->tid = current->thread_block->tid;
+			new_page_meta->next = NULL;
+			new_page_meta->head = NULL;
+			new_page_meta->middle = NULL;
+			new_page_meta->num_pages = num_of_pages;
+			current->thread_block->first_page = new_page_meta;
+			
+			//The "page" will take up several indices of the frame_table. When evicted, must account for all frames occupied. ***********************************
+			for (i = 0; i < num_of_pages; i++) {
+				frame_table[i] = new_page_meta;
+			}
+			current_page_meta = new_page_meta;
+		//If not first page, evict pages after the last frame used.
+		} else {
+			current->thread_block->malloc_frame++;
+			for (i = current->thread_block->malloc_frame; i < current->thread_block->malloc_frame + num_of_pages; i++) {
+				swap_pages(i, -1);
+			}
+			
+			//Create new page meta
+			new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+			new_page_meta->page_frame = current->thread_block->malloc_frame;
+			new_page_meta->tid = current->thread_block->tid;
+			new_page_meta->next = NULL;
+			new_page_meta->head = NULL;
+			new_page_meta->middle = NULL;
+			new_page_meta->num_pages = num_of_pages;
+			frame_table[current->thread_block->malloc_frame-1]->next = new_page_meta;
+			
+			//The "page" will take up several indices of the frame_table. When evicted, must account for all frames occupied. ***********************************
+			for (i = current->thread_block->malloc_frame; i < current->thread_block->malloc_frame; i++) {
+				frame_table[i] = new_page_meta;
+			}
+			current_page_meta = new_page_meta;
+		}
+		
+		rtn_ptr = mymalloc(x, file, line, myblock_ptr + current->thread_block->malloc_frame*4096, 4096*num_of_pages);
+		current_page_meta->head = head;
+		current_page_meta->middle = middle;
+		current_page_meta->free_page_mem = free_mem_count();
+		return rtn_ptr;
+	}
+	
+	
 	if (current->thread_block->first_page != NULL) {
 		page_meta_ptr temp_ptr = frame_table[current->thread_block->malloc_frame];
 		//If the right page is in frame, set the current_page_meta, head, and middle
@@ -73,6 +141,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 			new_page_meta->next = NULL;
 			new_page_meta->head = NULL;
 			new_page_meta->middle = NULL;
+			new_page_meta->num_pages = 1;
 			current->thread_block->first_page = new_page_meta;
 			frame_table[0] = new_page_meta;
 			current_page_meta = new_page_meta;
@@ -123,6 +192,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 			new_page_meta->next = NULL;
 			new_page_meta->head = NULL;
 			new_page_meta->middle = NULL;
+			new_page_meta->num_pages = 1;
 			frame_table[current->thread_block->malloc_frame] = new_page_meta;
 			frame_table[current->thread_block->malloc_frame-1]->next = new_page_meta;
 			current_page_meta = new_page_meta;
@@ -235,7 +305,6 @@ void swap_pages(int src_frame, int dest_frame) {
 			swap_file_offset = lseek(swap_fd,swap_index*4096,SEEK_SET);
 			write(swap_fd, myblock_ptr + src_frame * 4096, 4096);
 			lseek(swap_fd, -swap_file_offset + 4096, SEEK_CUR);
-
 		}
 			page_counter++;
 	}else {
@@ -260,19 +329,23 @@ void swap_pages(int src_frame, int dest_frame) {
 *
 * mprotect() to trigger SIGSEV, from the starting point until 1919*4096, not including "OS" region of physical memory
 *
-* lseek()  --- zero out 16MG of space???
+* lseek()  --- zero out 16MG of space??? Added O_CREAT, do we need anything else?????
 *
 * handle signal and swap correspondingly
 *
 * handle large allocations of multiple pages, TRICKY
+* 		Allocation Done
+* 		Still need to account for handling larger pages outside of allocating. ****************
 *
-* deallocation NOTE: keep track of how much free memory is in the block, member is entered in struct 
+* deallocation NOTE: keep track of how much free memory is in the block, member is entered in struct ------- DONE
 *
 * document and comment code
 *
 * EXTRA: free space in physical memory 
 *
 ***/
+
+
 
 
 
