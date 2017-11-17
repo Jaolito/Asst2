@@ -35,15 +35,15 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		lseek(swap_fd, 8338608*2, SEEK_SET);
 		
 		//myswap_ptr = memalign( sysconf(_SC_PAGESIZE), 8388608*2);
-		//6015 pages total, 1919 frames in physical memory
-		os_mem_ptr = myblock_ptr + 7860224;
+		//6004 pages total, 1908 frames in physical memory
+		os_mem_ptr = myblock_ptr + 7815168;
 		/*
 		*
-		*  8118272- (16677216/4096)*40  = (4101 + sizeof(page_meta)) num_frames
+		*  8118272- (16677216/4096)*sizeof(page_meta)  = (4104 + sizeof(page_meta)) num_frames
 		*
 		*	40 is size of page_meta
 		*/
-		frame_table = (page_meta_ptr *)myallocate(sizeof(page_meta_ptr)*1919, NULL, 0, LIBRARYREQ);
+		frame_table = (page_meta_ptr *)myallocate(sizeof(page_meta_ptr)*1908, NULL, 0, LIBRARYREQ);
 	}
 	
 	//If the current thread has a page
@@ -166,7 +166,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		}
 		current_page_meta = temp_ptr;
 		
-		//Individual page, proceed
+		//If the page is a part of a big chunk
 		if (current_page_meta->front_meta != NULL) {
 			int i;
 			page_meta_ptr swap_ptr;
@@ -216,12 +216,36 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		
 		//Check if any of the previous pages has room for the request.
 		page_meta_ptr temp_ptr = current->thread_block->first_page;
+		int counter = 0;
 		while (temp_ptr != NULL) {
+			//Can the temp page possibly fit the request?
 			if (temp_ptr->free_page_mem >= x) {
 				current_page_meta = temp_ptr;
+				
+				//Is the current page in physical memory? If not swap it in.
+				if (current_page_meta->page_frame != counter) {
+					swap_pages(current_page_meta->page_frame, counter);
+				}
+				
+				if (current_page_meta->front_meta != NULL) {
+					int i;
+					page_meta_ptr swap_ptr;
+					page_meta_ptr block_temp;
+					
+					swap_ptr = current_page_meta->front_meta;
+					for (i = current_page_meta->front_meta->page_frame; i < current_page_meta->page_frame; i++) {
+						block_temp = frame_table[i];
+						if (block_temp != swap_ptr) {
+							swap_pages(swap_ptr->page_frame, block_temp->page_frame);
+						}
+						swap_ptr = swap_ptr->next;
+					}
+				}
 				head = current_page_meta->head;
 				middle = current_page_meta->middle;
-				rtn_ptr = mymalloc(x, file, line, myblock_ptr + current->thread_block->malloc_frame*4096, 4096);
+				
+				//0s shouldn't matter because head and middle are already defined.
+				rtn_ptr = mymalloc(x, file, line, 0, 0);
 				if (rtn_ptr != NULL) {
 					current_page_meta->head = head;
 					current_page_meta->middle = middle;
@@ -229,13 +253,14 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 					return rtn_ptr;
 				}
 			}
+			counter++;
 			temp_ptr = temp_ptr->next;
 		}
 		
 		
 		//If you reach here, then none of the thread's pages could fit the request, so we need to allocate a new page.
 		//allocate new page from free list
-		if (page_counter < 6015) {
+		if (page_counter < 6004) {
 			current->thread_block->malloc_frame++;
 			
 			//Swaps the page after the current page to free space for contiguous pages
@@ -343,7 +368,7 @@ void swap_pages(int src_frame, int dest_frame) {
 	
 	if (dest_frame == -1) {
 
-		if(page_counter < 1919){
+		if(page_counter < 1908){
 			//Swap to new frame from free_queue_head
 			memcpy(myblock_ptr + page_counter*4096, myblock_ptr + src_frame * 4096, 4096);
 			
