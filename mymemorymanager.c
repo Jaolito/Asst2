@@ -1,9 +1,7 @@
 #include "mymemorymanager.h"
 #include "my_pthread_t.h"
 #include "my_pthread.c"
-#include <sys/types.h>
-#include <unistd.h>
-#include <fcntl.h>
+
 
 void * myblock_ptr;
 page_meta_ptr * frame_table;
@@ -16,8 +14,14 @@ int swap_fd;
 off_t swap_file_offset;
 int page_counter = 0;
 page_meta_ptr current_page_meta;
+int mem_flag;
+void * swap_temp;
 
 void * myallocate(unsigned int x, char * file, int line, req_type rt) {
+	
+	mem_flag = 1;
+	mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
+	mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 	
 	void * rtn_ptr;
 	page_meta_ptr new_page_meta;
@@ -25,10 +29,21 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		
 	if (first_call) {
 		first_call = 0;
-		signal(SIGSEGV, swap_handler);
+		
+		//Set Signal Handler
+		struct sigaction sa;
+		sa.sa_flags = SA_SIGINFO;
+		sigemptyset(&sa.sa_mask);
+		sa.sa_sigaction = swap_handler;
+		if (sigaction(SIGSEGV, &sa, NULL) == -1){
+			handle_error("sigaction");
+		}
+		
+		//signal(SIGSEGV, swap_handler);
 		
 		//May need to free later
 		myblock_ptr = memalign( sysconf(_SC_PAGESIZE), 8388608);
+		swap_temp = myblock_ptr + 1907 * 4096;
 		printf("myblock_ptr address: %p\n", myblock_ptr);
 		//Swap space
 		swap_fd = open("swap_file",O_RDWR | O_CREAT);
@@ -44,6 +59,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		*	40 is size of page_meta
 		*/
 		frame_table = (page_meta_ptr *)myallocate(sizeof(page_meta_ptr)*1908, NULL, 0, LIBRARYREQ);
+		mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 	}
 	
 	//If the current thread has a page
@@ -51,6 +67,9 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		//printf("Library Call\n");
 		void * temp = os_mem_ptr;
 		os_mem_ptr += x;
+		mprotect(myblock_ptr, 7815168, PROT_NONE);
+		
+		mem_flag = 0;
 		return temp;
 	}
 	
@@ -69,10 +88,12 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		if (current->thread_block->first_page == NULL) {
 			for (i = 0; i < num_of_pages; i++) {
 				swap_pages(i, -1);
+				mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 			}
 			
 			//Create page meta for the first of the big chunk
 			page_meta_ptr front_meta_ptr = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+			mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 			front_meta_ptr->page_frame = 0;
 			front_meta_ptr->tid = current->thread_block->tid;
 			front_meta_ptr->next = NULL;
@@ -87,6 +108,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 			//Create page metas for the rest of the pages of the big chunk
 			for (i = 1; i < num_of_pages; i++) {
 				new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+				mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 				new_page_meta->page_frame = i;
 				new_page_meta->tid = current->thread_block->tid;
 				new_page_meta->next = NULL;
@@ -107,10 +129,12 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 			current->thread_block->malloc_frame++;
 			for (i = current->thread_block->malloc_frame; i < current->thread_block->malloc_frame + num_of_pages; i++) {
 				swap_pages(i, -1);
+				mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 			}
 			
 			//Create page meta for the first of the big chunk
 			page_meta_ptr front_meta_ptr = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+			mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 			front_meta_ptr->page_frame = current->thread_block->malloc_frame;
 			front_meta_ptr->tid = current->thread_block->tid;
 			front_meta_ptr->next = NULL;
@@ -127,6 +151,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 			for (i = front_meta_ptr->page_frame + 1; i < front_meta_ptr->page_frame + num_of_pages; i++) {
 				current->thread_block->malloc_frame++;
 				new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+				mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 				new_page_meta->page_frame = i;
 				new_page_meta->tid = current->thread_block->tid;
 				new_page_meta->next = NULL;
@@ -148,6 +173,9 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		current_page_meta->head = head;
 		current_page_meta->middle = middle;
 		current_page_meta->free_page_mem = free_mem_count();
+		mprotect(myblock_ptr, 7815168, PROT_NONE);
+	
+		mem_flag = 0;
 		return rtn_ptr;
 	}
 	
@@ -163,6 +191,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 				temp_ptr = temp_ptr->next;
 			}
 			swap_pages(temp_ptr->page_frame, current->thread_block->malloc_frame);
+			mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 		}
 		current_page_meta = temp_ptr;
 		
@@ -176,6 +205,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 				temp_ptr = frame_table[i];
 				if (temp_ptr != swap_ptr) {
 					swap_pages(swap_ptr->page_frame, temp_ptr->page_frame);
+					mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 				}
 				swap_ptr = swap_ptr->next;
 			}
@@ -186,9 +216,11 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 	} else { //Current thread does not have its first page yet
 		
 		//Total number of potential pages not exceeded
-		if (page_counter < 6015) {
+		if (page_counter < 6004 || current->thread_block->malloc_frame < 1907) {
 			swap_pages(0, -1);
+			mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 			new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+			mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 			new_page_meta->page_frame = 0;
 			new_page_meta->tid = current->thread_block->tid;
 			new_page_meta->next = NULL;
@@ -225,6 +257,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 				//Is the current page in physical memory? If not swap it in.
 				if (current_page_meta->page_frame != counter) {
 					swap_pages(current_page_meta->page_frame, counter);
+					mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 				}
 				
 				if (current_page_meta->front_meta != NULL) {
@@ -237,6 +270,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 						block_temp = frame_table[i];
 						if (block_temp != swap_ptr) {
 							swap_pages(swap_ptr->page_frame, block_temp->page_frame);
+							mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 						}
 						swap_ptr = swap_ptr->next;
 					}
@@ -250,6 +284,9 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 					current_page_meta->head = head;
 					current_page_meta->middle = middle;
 					current_page_meta->free_page_mem = free_mem_count();
+					mprotect(myblock_ptr, 7815168, PROT_NONE);
+	
+					mem_flag = 0;
 					return rtn_ptr;
 				}
 			}
@@ -260,12 +297,14 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		
 		//If you reach here, then none of the thread's pages could fit the request, so we need to allocate a new page.
 		//allocate new page from free list
-		if (page_counter < 6004) {
+		if (page_counter < 6004 || current->thread_block->malloc_frame < 1907) {
 			current->thread_block->malloc_frame++;
 			
 			//Swaps the page after the current page to free space for contiguous pages
 			swap_pages(current->thread_block->malloc_frame, -1);
+			mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 			new_page_meta = (page_meta_ptr)myallocate(sizeof(struct page_meta), NULL, 0, LIBRARYREQ);
+			mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 			new_page_meta->page_frame = current->thread_block->malloc_frame;
 			new_page_meta->tid = current->thread_block->tid;
 			new_page_meta->next = NULL;
@@ -276,7 +315,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 			frame_table[current->thread_block->malloc_frame-1]->next = new_page_meta;
 			current_page_meta = new_page_meta;
 		} else {
-			//check if swapfile is full
+			return NULL;
 		}
 		head = NULL;
 		middle = NULL;
@@ -286,10 +325,17 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 		current_page_meta->middle = middle;
 		current_page_meta->free_page_mem = free_mem_count();
 	}
+	mprotect(myblock_ptr, 7815168, PROT_NONE);
+	
+	mem_flag = 0;
 	return rtn_ptr;
 }
 
 int mydeallocate(void * x, char * file, int line, req_type rt){
+	
+	mem_flag = 1;
+	mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
+	
 	
 	int mem_offset = (int)(x - myblock_ptr);
 	int index = mem_offset / 4096;
@@ -324,6 +370,7 @@ int mydeallocate(void * x, char * file, int line, req_type rt){
 		head = current_page_meta->head;
 		middle = current_page_meta->middle;
 		swap_pages(index, current_page_meta->page_frame);
+		mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
 		
 		//Check myfree return value for errors
 		myfree(x, file, line);
@@ -334,6 +381,9 @@ int mydeallocate(void * x, char * file, int line, req_type rt){
 	
 	//How do we tell a thread that one of its pages has free space if it has multiple pages
 	
+	mprotect(myblock_ptr, 7815168, PROT_NONE);
+	
+	mem_flag = 0;
 	return 0;
 }
 /*
@@ -350,7 +400,7 @@ int main(){
 
 /* Helper Functions */
 
-void swap_handler(int signum) {
+void swap_handler(int sig, siginfo_t *si, void *unused) {
 	
 	/*
 	 * Check page table to see if the page being accessed belongs to the current thread.
@@ -358,17 +408,45 @@ void swap_handler(int signum) {
 	 * 		else, find the page they want and swap pages
 	 */
 	
+	printf("swap_handler called\n");
+	
+	void * seg_address = (void *) si->si_addr;
+	int difference = (int)(seg_address - myblock_ptr);
+	int frame = difference / 4096;
+	
+	if (difference < 0 || difference > 7815168) {
+		exit(EXIT_FAILURE);
+	}
+	
+	if (frame > current->thread_block->malloc_frame) {
+		exit(EXIT_FAILURE);
+	}
+	
+	if (frame_table[frame]->tid != current->thread_block->tid) {
+		int i;
+		page_meta_ptr temp_ptr = current->thread_block->first_page;
+		for (i = 0; i < frame; i++) {
+			temp_ptr = temp_ptr->next;
+		}
+		swap_pages(temp_ptr->page_frame, frame);
+		mprotect(myblock_ptr, 7815168, PROT_NONE);
+	}
+	mprotect(myblock_ptr + frame * 4096, 4096,PROT_READ | PROT_WRITE);
+	return;
 }
 
 void swap_pages(int src_frame, int dest_frame) {
-
-	void * temp[4096];
-
-	int swap_index;
 	
+	
+	mem_flag = 1;
+	mprotect(myblock_ptr, 7815168, PROT_READ | PROT_WRITE);
+	
+	int swap_index;
 	if (dest_frame == -1) {
 
 		if(page_counter < 1908){
+			
+			
 			//Swap to new frame from free_queue_head
 			memcpy(myblock_ptr + page_counter*4096, myblock_ptr + src_frame * 4096, 4096);
 			
@@ -386,11 +464,10 @@ void swap_pages(int src_frame, int dest_frame) {
 			lseek(swap_fd, -swap_file_offset + 4096, SEEK_CUR);
 		}
 			page_counter++;
-	}else {
-		
-		memcpy(temp, myblock_ptr + src_frame * 4096, 4096);
+	}else {		
+		memcpy(swap_temp, myblock_ptr + src_frame * 4096, 4096);
 		memcpy(myblock_ptr + src_frame * 4096, myblock_ptr + dest_frame * 4096, 4096);
-		memcpy(myblock_ptr + dest_frame * 4096, temp, 4096);
+		memcpy(myblock_ptr + dest_frame * 4096, swap_temp, 4096);
 		
 		//Update page table
 		page_meta_ptr temp_pm = frame_table[src_frame];
@@ -399,7 +476,7 @@ void swap_pages(int src_frame, int dest_frame) {
 		frame_table[src_frame]->page_frame = src_frame;
 		frame_table[dest_frame]->page_frame = dest_frame;
 	}
-	
+	mem_flag = 0;
 }
 
 

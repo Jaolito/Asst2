@@ -58,10 +58,11 @@ void *mythread(void *arg){
 	my_pthread_join(thread, NULL);
 	
 	printf("intArray address: %p\n", (void *)intArray);
+	printf("test: %d\n", intArray[0]);
 	
 	printf("intArray2 address: %p\n", (void *)intArray2);
 	
-	printf("[%d, %d]\n", ((int *)(((void *)intArray) + 4096))[0], ((int *)(((void *)intArray) + 4096))[1]);
+	printf("[%d, %d]\n", intArray[0], intArray[1]);
 	
 	my_pthread_exit(arg);
 	return NULL;

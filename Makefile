@@ -11,4 +11,4 @@ test: mymemorymanager.o test.c
 	gcc -Wall -o test test.c mymemorymanager.o -g
 
 clean:
-	rm *.o test
+	rm *.o test swap_file -f

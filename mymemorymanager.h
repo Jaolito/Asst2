@@ -9,10 +9,18 @@
 #include <signal.h>
 #include <malloc.h>
 #include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/ucontext.h>
 #include "my_pthread_t.h"
 
 #define malloc(x) myallocate(x, __FILE__, __LINE__, THREADREQ)
 #define free(x) mydeallocate(x, __FILE__, __LINE__, THREADREQ)
+
+#define handle_error(msg) \
+           do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
 /* Structs */
 
@@ -38,7 +46,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt);
 
 int mydeallocate(void * x, char * file, int line, req_type rt);
 
-void swap_handler(int signum);
+void swap_handler(int sig, siginfo_t *si, void *unused);
 
 void swap_pages(int src_frame, int dest_frame);
 

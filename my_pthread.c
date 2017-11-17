@@ -23,6 +23,7 @@ exit_node * exit_list = NULL;
 flagCalled fc = FIRST;
 int firstThread = 1;
 unsigned int maintenanceCount = 0;
+extern int mem_flag;
 
 //Timer
 struct itimerval itv;
@@ -33,6 +34,10 @@ int mutex_count = 0;
 
 /* create a new thread */
 int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*function)(void*), void * arg) {
+	
+	if (firstThread) {
+		mem_flag = 0;
+	}
 	
 	printf("In pthread_create\n");
 	void (*exit_function) (void *) = &my_pthread_exit;
@@ -337,12 +342,22 @@ void createScheduler() {
 }
 
 void timer_triggered(int signum) {
-	//printf("TIMER\n");
+	printf("TIMER\n");
 	fc = TIMER;
 	scheduler();
 }
 
 void scheduler() {
+	
+	printf("Scheduler running, mem_flag = %d\n", mem_flag);
+	if (mem_flag) {
+		int t = current->thread_block->thread_priority;
+		itv.it_value.tv_usec = (25 + 25 * t) * 1000;
+		itv.it_value.tv_sec = 0;
+		itv.it_interval = itv.it_value;
+	//	setitimer(ITIMER_REAL, &itv, NULL);
+		return;
+	}
 	
 	if (updateQueue()) {
 		//Let current thread resume
@@ -398,10 +413,10 @@ void scheduler() {
 		itv.it_value.tv_sec = 0;
 		itv.it_interval = itv.it_value;
 		 
-		if(setitimer(ITIMER_REAL, &itv, NULL) == -1){
+		/*if(setitimer(ITIMER_REAL, &itv, NULL) == -1){
 			//print error
 			return;
-		}
+		}*/
 		
 		
 		
@@ -418,7 +433,7 @@ void scheduler() {
 		}
 		
 	}
-	 
+	
 }
 
 //Updates queues if necessary. Return 1 if current thread should resume
