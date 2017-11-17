@@ -154,14 +154,35 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 	
 	if (current->thread_block->first_page != NULL) {
 		page_meta_ptr temp_ptr = frame_table[current->thread_block->malloc_frame];
-		//If the right page is in frame, set the current_page_meta, head, and middle
-		if (temp_ptr->tid == current->thread_block->tid) {
-			current_page_meta = temp_ptr;
-			head = current_page_meta->head;
-			middle = current_page_meta->middle;
-		} else {
+		
+		//If the page is not in frame, swap it in
+		if (temp_ptr->tid != current->thread_block->tid) {
 			//SWAP IN THE RIGHT PAGE
+			temp_ptr = current->thread_block->first_page;
+			while (temp_ptr->next != NULL) {
+				temp_ptr = temp_ptr->next;
+			}
+			swap_pages(temp_ptr->page_frame, current->thread_block->malloc_frame);
 		}
+		current_page_meta = temp_ptr;
+		
+		//Individual page, proceed
+		if (current_page_meta->front_meta != NULL) {
+			int i;
+			page_meta_ptr swap_ptr;
+			
+			swap_ptr = current_page_meta->front_meta;
+			for (i = current_page_meta->front_meta->page_frame; i < current_page_meta->page_frame; i++) {
+				temp_ptr = frame_table[i];
+				if (temp_ptr != swap_ptr) {
+					swap_pages(swap_ptr->page_frame, temp_ptr->page_frame);
+				}
+				swap_ptr = swap_ptr->next;
+			}
+		}
+		head = current_page_meta->head;
+		middle = current_page_meta->middle;
+			 
 	} else { //Current thread does not have its first page yet
 		
 		//Total number of potential pages not exceeded
@@ -173,6 +194,7 @@ void * myallocate(unsigned int x, char * file, int line, req_type rt) {
 			new_page_meta->next = NULL;
 			new_page_meta->head = NULL;
 			new_page_meta->middle = NULL;
+			new_page_meta->front_meta = NULL;
 			new_page_meta->num_pages = 1;
 			current->thread_block->first_page = new_page_meta;
 			frame_table[0] = new_page_meta;
