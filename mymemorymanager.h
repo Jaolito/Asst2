@@ -50,4 +50,10 @@ void swap_handler(int sig, siginfo_t *si, void *unused);
 
 void swap_pages(int src_frame, int dest_frame);
 
+void lock_mem();
+
+void * shalloc(size_t size);
+
+int printCount();
+
 #endif

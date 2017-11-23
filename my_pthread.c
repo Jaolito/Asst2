@@ -7,6 +7,7 @@
 // iLab Server: test
 
 #include "my_pthread_t.h"
+#include "mymemorymanager.h"
 
 extern mementryPtr head;
 extern mementryPtr middle;
@@ -39,12 +40,14 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
 		mem_flag = 0;
 	}
 	
-	printf("In pthread_create\n");
+	//printf("In pthread_create\n");
 	void (*exit_function) (void *) = &my_pthread_exit;
 	ucontext_t *exit_context = (ucontext_t *)myallocate((sizeof(ucontext_t)), NULL, 0, LIBRARYREQ);
+	mem_flag = 0;
 	getcontext(exit_context);
 	exit_context -> uc_link=0;
  	exit_context -> uc_stack.ss_sp = myallocate(2080, NULL, 0, LIBRARYREQ);
+ 	mem_flag = 0;
  	exit_context -> uc_stack.ss_size=MEM;
  	exit_context -> uc_stack.ss_flags=0;
  	makecontext(exit_context, (void*)exit_function, 1, NULL);
@@ -52,9 +55,12 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
 	
 	ucontext_t *new_context, *old_context;
 	new_context = (ucontext_t *)myallocate((sizeof(ucontext_t)), NULL, 0, LIBRARYREQ);
+	mem_flag = 0;
 	getcontext(new_context);
 	tcb * new_thread_block = (tcb *)myallocate((sizeof(tcb)), NULL, 0, LIBRARYREQ);
+	mem_flag = 0;
 	context_node * new_node = (context_node *)myallocate((sizeof(context_node)), NULL, 0, LIBRARYREQ);
+	mem_flag = 0;
 	
 	if (firstThread) {
 		firstThread = 0;
@@ -62,13 +68,17 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
 		createScheduler();
 		
 		old_context = (ucontext_t *)myallocate((sizeof(ucontext_t)), NULL, 0, LIBRARYREQ);
+		mem_flag = 0;
 		context_node * old_node = (context_node *)myallocate((sizeof(context_node)), NULL, 0, LIBRARYREQ);
+		mem_flag = 0;
 		tcb * old_thread_block = (tcb *)myallocate((sizeof(tcb)), NULL, 0, LIBRARYREQ);
+		mem_flag = 0;
 		getcontext(old_context);
 		
 		//Creates new thread context and new thread node 
 		new_context -> uc_link=exit_context;
  		new_context -> uc_stack.ss_sp= myallocate(MEM, NULL, 0, LIBRARYREQ);
+ 		mem_flag = 0;
  		new_context -> uc_stack.ss_size=MEM;
  		new_context -> uc_stack.ss_flags=0;
  		makecontext(new_context, (void*)function, 1, arg);
@@ -110,6 +120,7 @@ int my_pthread_create(my_pthread_t * thread, pthread_attr_t * attr, void *(*func
 		//Creates new thread context and new thread node 
 		new_context -> uc_link=exit_context;
  		new_context -> uc_stack.ss_sp= myallocate(MEM, NULL, 0, LIBRARYREQ);
+ 		mem_flag = 0;
  		new_context -> uc_stack.ss_size=MEM;
  		new_context -> uc_stack.ss_flags=0;
  		makecontext(new_context, (void*)function, 1, arg);
@@ -156,6 +167,7 @@ void my_pthread_exit(void *value_ptr) {
 	
 	int i;
 	exit_node * e = (exit_node *)myallocate((sizeof(exit_node)), NULL, 0, LIBRARYREQ);
+	mem_flag = 0;
 	e -> next = NULL;
 	e -> tid = current->thread_block->tid;
 	e -> value_ptr = value_ptr;
@@ -324,16 +336,20 @@ void createScheduler() {
 	
 	int i;
 	running_qs = (pLevels *)myallocate((sizeof(pLevels)), NULL, 0, LIBRARYREQ);	
+	mem_flag = 0;
 	for (i = 0; i < NUM_PRIORITIES; i++) {
 		running_qs->rqs[i] = (queue *)myallocate((sizeof(queue)), NULL, 0, LIBRARYREQ);
+		mem_flag = 0;
 		running_qs->rqs[i]->front = NULL;
 		running_qs->rqs[i]->back = NULL;
 	}
 	waiting_queue = (queue *)myallocate((sizeof(queue)), NULL, 0, LIBRARYREQ);
+	mem_flag = 0;
 	waiting_queue->front = NULL;
 	waiting_queue->back = NULL;
 	
 	join_queue = (queue *)myallocate((sizeof(queue)), NULL, 0, LIBRARYREQ);
+	mem_flag = 0;
 	join_queue->front = NULL;
 	join_queue->back = NULL;
 	
@@ -342,20 +358,21 @@ void createScheduler() {
 }
 
 void timer_triggered(int signum) {
-	printf("TIMER\n");
+	//printf("TIMER\n");
 	fc = TIMER;
 	scheduler();
 }
 
 void scheduler() {
 	
-	printf("Scheduler running, mem_flag = %d\n", mem_flag);
+	//printf("Scheduler running, mem_flag = %d\n", mem_flag);
 	if (mem_flag) {
 		int t = current->thread_block->thread_priority;
 		itv.it_value.tv_usec = (25 + 25 * t) * 1000;
 		itv.it_value.tv_sec = 0;
 		itv.it_interval = itv.it_value;
-	//	setitimer(ITIMER_REAL, &itv, NULL);
+		setitimer(ITIMER_REAL, &itv, NULL);
+		//printf("Timer Reset\n");
 		return;
 	}
 	
@@ -413,10 +430,10 @@ void scheduler() {
 		itv.it_value.tv_sec = 0;
 		itv.it_interval = itv.it_value;
 		 
-		/*if(setitimer(ITIMER_REAL, &itv, NULL) == -1){
+		if(setitimer(ITIMER_REAL, &itv, NULL) == -1){
 			//print error
 			return;
-		}*/
+		}
 		
 		
 		
@@ -429,6 +446,8 @@ void scheduler() {
 			//printf("SWAP\n");
 			context_node * old = current;
 			current = new_context;
+			lock_mem();
+			//printf("Switching\n");
 			swapcontext(old->thread_block->thread_context, new_context->thread_block->thread_context);
 		}
 		
@@ -448,7 +467,7 @@ int updateQueue(){
 			//printf("FIRST CASE\n");
 			return 0;
 		case TIMER: 
-			//printf("TIMER CASE\n");
+			printf("TIMER CASE\n");
 			if (current->thread_block->thread_priority < NUM_PRIORITIES - 1) {
 				current->thread_block->thread_priority++;
 				enqueuee(dequeuee(running_qs->rqs[current->thread_block->thread_priority-1]), running_qs->rqs[current->thread_block->thread_priority]);
@@ -715,7 +734,7 @@ void * mymalloc(unsigned int x, char * file, int line, void * memptr, int size) 
 		}
 	}
 	//If you reach here, the space could not be allocated.
-	printf("mymalloc could not allocate the requested space at line %d of file %s.\n", line, file);
+	//printf("mymalloc could not allocate the requested space at line %d of file %s.\n", line, file);
 	return NULL;
 }
 

@@ -12,7 +12,7 @@
 
 #define NUM_PRIORITIES 10
 #define MAINT_CYCLE 100
-#define MEM 4096
+#define MEM 4096*10
 
 #define pthread_ my_pthread_
 #define USE_MY_PTHREAD 1
