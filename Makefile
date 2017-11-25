@@ -1,4 +1,4 @@
-all: my_pthread.o mymemorymanager.h
+all: my_pthread.o mymemorymanager.h mymemorymanager.o
 	gcc -Wall -o test mymemorymanager.c my_pthread.o -g
 
 my_pthread.o: my_pthread.c my_pthread_t.h
